@@ -84,9 +84,8 @@ npm run publish:local                # build + upload, prints the plugin URL
 The API key is read **only** from `~/.config/spearo/windy_api_key`, which lives
 **outside this repository** — it is never passed as an argument, never printed (tracing
 is disabled before the key is read) and never committed. Get a key at
-<https://api.windy.com/keys>. A GitHub Actions alternative
-(`.github/workflows/publish-plugin.yml` with a `WINDY_API_KEY` repository secret) is
-described in [docs/README.ru.md](docs/README.ru.md).
+<https://api.windy.com/keys>. Publishing is done locally on purpose: no CI secrets are
+stored in this repository.
 
 After publishing, the plugin is announced in the Windy gallery approval thread
 (<https://community.windy.com/topic/31066>) together with a screenshot of the plugin
