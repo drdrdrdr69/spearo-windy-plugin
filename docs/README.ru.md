@@ -117,7 +117,7 @@ src/
   zonesController.ts жизненный цикл слоя: дебаунс, request-id, abort, destroy
   coords.ts         разбор координат из роутера (строки → числа, валидация)
   screenshot.jpg    скриншот для галереи (см. §6)
-scripts/publish.sh  локальная публикация без GitHub Actions (ключ из файла)
+scripts/publish.sh  публикация в Windy с локальной машины (ключ из файла вне репо)
 dev/preview/        автономный предпросмотр панели
 tests/              юнит-тесты чистых функций
 ```
@@ -201,15 +201,16 @@ noTake{inside,name,actUrl}, attribution{provider,url}, updatedISO, source, ok`.
 ## 5. Публикация (делает ВЛАДЕЛЕЦ, ключи в репозиторий не коммитятся)
 
 Плагины Windy обязаны раздаваться с домена `windy-plugins.com`, поэтому публикация —
-это загрузка собранного `dist/` на сервер Windy. Приватных GitHub-action'ов в
-процессе нет: `.github/workflows/publish-plugin.yml` просто собирает проект,
-дописывает в `dist/plugin.json` поля `repositoryName` / `repositoryOwner` / `commitSha`,
-пакует каталог в `plugin.tar` и шлёт `POST https://node.windy.com/plugins/v1.0/upload`
-с заголовком `x-windy-api-key`. Поэтому то же самое можно сделать локально.
+это загрузка собранного `dist/` на сервер Windy: сборка, дозапись в `dist/plugin.json`
+полей `repositoryName` / `repositoryOwner` / `commitSha`, упаковка каталога в
+`plugin.tar` и `POST https://node.windy.com/plugins/v1.0/upload` с заголовком
+`x-windy-api-key`.
 
-Ключ Windy Plugins API берётся на <https://api.windy.com/keys>.
+Публикуем **только с локальной машины**: CI в репозитории нет и секретов в нём не
+хранится. Ключ Windy Plugins API берётся на <https://api.windy.com/keys> и живёт в
+файле вне репозитория.
 
-### Вариант A (рекомендуемый локально): `npm run publish:local`
+### `npm run publish:local`
 
 ```bash
 mkdir -p ~/.config/spearo
@@ -229,23 +230,9 @@ npm run publish:local                # сборка + загрузка, печа
   выключается до чтения ключа, заголовок уходит в curl через временный
   `--config`-файл с `umask 077`, который удаляется после запроса (ключ не виден
   ни в `ps`, ни в логе `bash -x` — проверено);
-- повторяет шаги workflow один в один (build → merge `plugin.json` → `tar` → upload);
-- печатает ответ сервера и установочный URL вида
+- делает всю цепочку сам: build → merge `plugin.json` → `tar` → upload;
+- печатает только разобранные поля ответа и установочный URL вида
   `https://windy-plugins.com/<userId>/windy-plugin-spearo/<version>/plugin.min.js`.
-
-### Вариант B: GitHub Actions
-
-Репозиторий создаёт **владелец** (аккаунт его, `gh repo create` из этого проекта не запускается):
-
-1. Создать на GitHub репозиторий **`spearo-windy-plugin`** и запушить эту ветку
-   (`git remote add origin git@github.com:<owner>/spearo-windy-plugin.git && git push -u origin main`).
-   После этого поправить `repository` в `src/pluginConfig.ts` и `package.json` на реальный URL.
-2. **Settings → Secrets and variables → Actions → New repository secret**:
-   имя **`WINDY_API_KEY`**, значение — ключ. Ключ живёт только в секретах GitHub;
-   в коде, `.env` и коммитах его быть не должно.
-3. **Actions → publish-plugin → Run workflow** (workflow уже в репозитории,
-   запускается вручную, `workflow_dispatch`).
-4. В логе шага *Publish Plugin* — установочный URL плагина.
 
 Каждая новая публикация требует **увеличения `version`** в `src/pluginConfig.ts`
 (и в `package.json`).
@@ -255,7 +242,7 @@ npm run publish:local                # сборка + загрузка, печа
 `private: false` (с версии 0.1.1) — плагин заявляется в публичную галерею; до
 одобрения он доступен по прямой установочной ссылке.
 
-Публикация делается командой `npm run publish:local` (см. §5, вариант A), после чего
+Публикация делается командой `npm run publish:local` (см. §5), после чего
 подаётся заявка в тему галереи. Чтобы попасть в публичную галерею Windy:
 
 1. Положить в `src/` настоящий скриншот плагина **внутри интерфейса Windy**
