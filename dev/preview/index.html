@@ -1,0 +1,41 @@
+<!-- Автономный предпросмотр панели ВНЕ windy.com: клиентский API Windy тут заглушён.
+     Запуск: npm run preview → http://127.0.0.1:8931/dev/preview/index.html?mock=1 -->
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+  body { margin:0; background:#1b1f24; color:#e9edf1; font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; }
+  #panel { width: 400px; padding: 16px 20px; box-sizing: border-box; }
+  .plugin__mobile-header { display:none; }
+  .plugin__title { font-size:20px; font-weight:600; margin-bottom:4px; }
+  .size-xs { font-size:11px; } .size-xxs { font-size:10px; } .size-s { font-size:13px; }
+  .rounded-box { border-radius:8px; }
+  .badge { padding:1px 6px; border-radius:6px; }
+  .bg-red { background:#e02020; } .fg-white { color:#fff; }
+  a { color:#7fd4ff; }
+  .button { display:inline-block; padding:10px 14px; border-radius:8px; background:#1e88e5; color:#fff; text-decoration:none; font-weight:600; }
+</style></head>
+<body>
+<div id="panel"></div>
+<script>
+  // Заглушки клиентского API Windy (только для скриншота панели вне windy.com)
+  const listeners = {};
+  window.W = {
+    broadcast: { emit(){}, on(){}, off(){} },
+    map: { map: {
+      getCenter: () => ({ lat: 38.4406, lng: -9.1005 }),
+      getBounds: () => ({ getSouth:()=>38.3, getWest:()=>-9.3, getNorth:()=>38.6, getEast:()=>-8.9 }),
+      addLayer(){}, on(){}, off(){},
+    } },
+    singleclick: { singleclick: { on(){}, off(){} } },
+    location: { setUrl(){} },
+    geolocation: { getMyLatestPos: () => ({ lat: 38.44, lon: -9.1 }) },
+  };
+  window.L = { GeoJSON: class { constructor(){} remove(){} } };
+</script>
+<script type="module">
+  import Plugin from '../../dist/plugin.js';
+  const plugin = new Plugin({ target: document.getElementById('panel') });
+  plugin.onopen();
+  window.__ready = true;
+</script>
+</body></html>

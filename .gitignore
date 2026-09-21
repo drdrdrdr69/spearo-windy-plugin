@@ -1,0 +1,23 @@
+# build output
+dist/
+*.tgz
+
+# deps
+node_modules
+package-lock.json
+
+# local dev artefacts
+.tmp
+tmp
+.rollup.cache
+.secret-api-key.sh
+nohup.out
+*.log
+dev/preview/plugin.js
+dev/preview/*.png
+dev/preview/*.jpg
+
+# editors / OS
+.DS_Store
+.vscode
+.idea

@@ -1,0 +1,37 @@
+{
+    "compilerOptions": {
+        "baseUrl": ".",
+        "module": "ESNext",
+        "lib": ["es2022", "webworker", "DOM"],
+        "noImplicitAny": true,
+        "removeComments": true,
+        "outDir": "dist",
+        "target": "es2022",
+        "typeRoots": [ "./node_modules/@types/","./declarations"],
+        "resolveJsonModule": false,
+        "sourceMap": false,
+        "incremental": true,
+        "noEmit": true,
+        // Импорты внутри src/ идут с расширением .ts — так их резолвит и node
+        // (юнит-тесты через `node --test` со strip-types), и rollup.
+        "allowImportingTsExtensions": true,
+        "alwaysStrict": true,
+        "esModuleInterop": true,
+        "noUnusedLocals": true,
+        "noImplicitReturns": true,
+        "noImplicitThis": true,
+        "noFallthroughCasesInSwitch": true,
+        "moduleResolution": "node",
+        "strictNullChecks": true,
+        "strictBindCallApply": true,
+        "forceConsistentCasingInFileNames": true,
+        "isolatedModules": true,
+        "paths": {
+            "@windy/*": [
+                "./node_modules/@windycom/plugin-devtools/types/*",
+                "./node_modules/@windycom/plugin-devtools/types/client/*",
+            ],
+        }
+    },
+    "include": ["**/*.ts", "**/*.svelte"],
+}

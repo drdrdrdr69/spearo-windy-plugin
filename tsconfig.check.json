@@ -1,0 +1,10 @@
+{
+    // Типопроверка ТОЛЬКО нашего кода: skipLibCheck отсекает ошибки внутри
+    // .d.ts самого @windycom/plugin-devtools (они есть и в чистом шаблоне).
+    "extends": "./tsconfig.json",
+    "compilerOptions": {
+        "skipLibCheck": true
+    },
+    // tests/ не включаем: они рассчитаны на node --test (strip-types), @types/node не ставим.
+    "include": ["src/**/*.ts", "declarations/**/*.d.ts"]
+}
