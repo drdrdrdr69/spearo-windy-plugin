@@ -1,6 +1,6 @@
 {
     "name": "windy-plugin-spearo",
-    "version": "0.1.4",
+    "version": "0.1.5",
     "description": "Windy.com plugin: water visibility, wave/wind safety verdict and no-take zones by spearo.app",
     "main": "dist/plugin.min.js",
     "type": "module",

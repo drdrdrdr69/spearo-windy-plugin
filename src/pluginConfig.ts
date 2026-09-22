@@ -2,7 +2,7 @@ import type { ExternalPluginConfig } from '@windy/interfaces';
 
 const config: ExternalPluginConfig = {
     name: 'windy-plugin-spearo',
-    version: '0.1.4',
+    version: '0.1.5',
     icon: '🤿',
     title: 'spearo — water visibility & no-take zones',
     description:
