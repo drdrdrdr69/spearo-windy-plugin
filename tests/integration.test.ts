@@ -226,10 +226,10 @@ test('conditions: 429/503 → ok:false с кодом, сеть падает → 
     await assert.rejects(() => getConditions(38.44, -9.1, 0));
 });
 
-// ── Горизонт 7 дней ───────────────────────────────────────────────────────────
+// ── Горизонт панели: 3 дня ────────────────────────────────────────────────────
 
-test('горизонт: запрашиваем days=7 и отдаём список доступных дат', async () => {
-    const days = Array.from({ length: 7 }, (_, i) => ({
+test('горизонт: запрашиваем days=3 и отдаём список доступных дат', async () => {
+    const days = Array.from({ length: 3 }, (_, i) => ({
         date: `2026-09-${String(20 + i).padStart(2, '0')}`,
         vizM: 3 + i,
         waveM: 0.5,
@@ -239,15 +239,15 @@ test('горизонт: запрашиваем days=7 и отдаём списо
     mockFetch(httpResponse(200, { ok: true, today: '2026-09-20', days, stale: false }));
 
     const first = await getConditions(38.44, -9.1, 0, { locale: 'en' });
-    assert.match(calls[0].url, /days=7/);
+    assert.match(calls[0].url, /days=3/);
     assert.equal(first.locationToday, '2026-09-20');
-    assert.equal(first.availableDates.length, 7);
+    assert.equal(first.availableDates.length, 3);
     assert.equal(first.dateISO, '2026-09-20');
 
-    const last = await getConditions(38.44, -9.1, 6, { locale: 'en' });
-    assert.equal(calls.length, 1, 'седьмой день берётся из того же бандла');
-    assert.equal(last.dateISO, '2026-09-26');
-    assert.equal(last.visibilityM, 9);
+    const last = await getConditions(38.44, -9.1, 2, { locale: 'en' });
+    assert.equal(calls.length, 1, 'третий день берётся из того же бандла');
+    assert.equal(last.dateISO, '2026-09-22');
+    assert.equal(last.visibilityM, 5);
 });
 
 test('горизонт: короткий ответ — недостающие дни пустые, даты не выдумываются', async () => {
@@ -262,8 +262,8 @@ test('горизонт: короткий ответ — недостающие �
             stale: false,
         }),
     );
-    const fifth = await getConditions(38.44, -9.1, 4, { locale: 'en' });
-    assert.equal(fifth.dateISO, null);
-    assert.equal(fifth.visibilityM, null);
-    assert.deepEqual(fifth.availableDates, ['2026-09-20', '2026-09-21']);
+    const third = await getConditions(38.44, -9.1, 2, { locale: 'en' });
+    assert.equal(third.dateISO, null, 'день без данных остаётся пустым');
+    assert.equal(third.visibilityM, null);
+    assert.deepEqual(third.availableDates, ['2026-09-20', '2026-09-21']);
 });

@@ -21,6 +21,51 @@ const UTM: Record<string, string> = {
     utm_campaign: 'windy-plugin',
 };
 
+// ── Ссылки на магазины приложений ────────────────────────────────────────────
+// Семантика атрибуции повторяет сайт, чтобы установка из плагина попала в те же
+// отчёты, что и установки с сайта:
+//   Play  — `referrer=utm_source=<src>&utm_medium=web&utm_campaign=store_badge`
+//           (значение кодируется ЦЕЛИКОМ, внутренние "=" и "&" переживают вложение);
+//   Apple — `?ct=<src>` (кампания без provider token всё равно именует ссылку;
+//           `mt` не шлём — Apple отвечает на него редиректом).
+// Источник для ручной кампании на сайте — префикс `utm-` + слаг: Windy → `utm-windy`.
+
+/** Идентификатор Android-приложения (applicationId). */
+export const PLAY_PACKAGE = 'app.spearo';
+/** Публичный листинг Play (без меток — метки навешивает playStoreUrl). */
+export const PLAY_LISTING_URL = `https://play.google.com/store/apps/details?id=${PLAY_PACKAGE}`;
+/** Публичный листинг App Store. */
+export const APP_STORE_LISTING_URL = 'https://apps.apple.com/app/id6787949200';
+
+/** Токен источника для установок из плагина Windy. */
+export const STORE_SOURCE = 'utm-windy';
+/** Кампания бейджа — та же, что у бейджей сайта. */
+export const STORE_CAMPAIGN = 'store_badge';
+/** Канал: плагин — веб-поверхность. */
+export const STORE_MEDIUM = 'web';
+
+/** Сырой referrer для Play (`k=v&k=v`, кодируется вызывающим целиком). */
+export function playReferrerValue(source: string = STORE_SOURCE): string {
+    return `utm_source=${source}&utm_medium=${STORE_MEDIUM}&utm_campaign=${STORE_CAMPAIGN}`;
+}
+
+/** Ссылка на Play с referrer-атрибуцией. Только https, иначе null. */
+export function playStoreUrl(source: string = STORE_SOURCE): string | null {
+    const separator = PLAY_LISTING_URL.includes('?') ? '&' : '?';
+    return sanitizeUrl(`${PLAY_LISTING_URL}${separator}referrer=${encodeURIComponent(playReferrerValue(source))}`);
+}
+
+/** Ссылка на App Store с кампанией `ct`. Только https, иначе null. */
+export function appStoreUrl(source: string = STORE_SOURCE): string | null {
+    try {
+        const url = new URL(APP_STORE_LISTING_URL);
+        url.searchParams.set('ct', source);
+        return sanitizeUrl(url.toString());
+    } catch {
+        return null;
+    }
+}
+
 /**
  * BCP-47-тег → локаль spearo. Зеркалит aliasLocale() сайта: region-insensitive,
  * "gr" читается как греческий. Неизвестный язык → en.
@@ -119,6 +164,26 @@ export function withUtm(rawUrl: string): string {
         return rawUrl;
     }
 }
+
+/**
+ * Та же ссылка, но с ЯВНОЙ кампанией: у отдельных мест в панели своя метка, иначе
+ * они сольются в одну строку отчёта. Кампания перезаписывается (в nearest.url она
+ * уже стоит), source/medium остаются плагинными.
+ */
+export function withCampaign(rawUrl: string, campaign: string): string {
+    try {
+        const url = new URL(rawUrl, SITE_ORIGIN);
+        url.searchParams.set('utm_source', UTM.utm_source);
+        url.searchParams.set('utm_medium', UTM.utm_medium);
+        url.searchParams.set('utm_campaign', campaign);
+        return url.toString();
+    } catch {
+        return rawUrl;
+    }
+}
+
+/** Кампания тизера «ещё дни на spearo». */
+export const DAYS_TEASER_CAMPAIGN = 'windy-plugin-days';
 
 /**
  * Ссылка на прогноз spearo: https://spearo.app/{locale}/{city}?utm_…

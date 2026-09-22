@@ -5,6 +5,90 @@
  */
 import type { Locale } from './links';
 
+/**
+ * Карточка «Приложение spearo» — единственный блок, переведённый на ВСЕ девять
+ * локалей сайта (остальной chrome панели живёт в en/ru): её читают люди, которые
+ * ставят приложение, и на родном языке это решается заметно лучше.
+ */
+export interface AppCardStrings {
+    title: string;
+    line: string;
+    appStore: string;
+    googlePlay: string;
+    /** Тизер в полоске дней: «+4 дня на spearo →» ({n} — сколько дней сверх панели). */
+    moreDays: string;
+}
+
+const APP_CARD: Record<Locale, AppCardStrings> = {
+    en: {
+        title: 'spearo app',
+        line: 'Full forecast for your own spots, dive log and zones offline',
+        appStore: 'App Store',
+        googlePlay: 'Google Play',
+        moreDays: '+{n} days on spearo →',
+    },
+    ru: {
+        title: 'Приложение spearo',
+        line: 'Полный прогноз по своим точкам, дневник заныров и зоны офлайн',
+        appStore: 'App Store',
+        googlePlay: 'Google Play',
+        moreDays: '+{n} дня на spearo →',
+    },
+    pt: {
+        title: 'Aplicação spearo',
+        line: 'Previsão completa nos teus pontos, diário de mergulhos e zonas offline',
+        appStore: 'App Store',
+        googlePlay: 'Google Play',
+        moreDays: '+{n} dias no spearo →',
+    },
+    es: {
+        title: 'App spearo',
+        line: 'Pronóstico completo de tus puntos, diario de inmersiones y zonas sin conexión',
+        appStore: 'App Store',
+        googlePlay: 'Google Play',
+        moreDays: '+{n} días en spearo →',
+    },
+    it: {
+        title: 'App spearo',
+        line: 'Previsioni complete sui tuoi spot, diario immersioni e zone offline',
+        appStore: 'App Store',
+        googlePlay: 'Google Play',
+        moreDays: '+{n} giorni su spearo →',
+    },
+    el: {
+        title: 'Εφαρμογή spearo',
+        line: 'Πλήρης πρόγνωση στα σημεία σου, ημερολόγιο καταδύσεων και ζώνες offline',
+        appStore: 'App Store',
+        googlePlay: 'Google Play',
+        moreDays: '+{n} ημέρες στο spearo →',
+    },
+    fr: {
+        title: 'Application spearo',
+        line: 'Prévisions complètes sur vos spots, carnet de plongée et zones hors ligne',
+        appStore: 'App Store',
+        googlePlay: 'Google Play',
+        moreDays: '+{n} jours sur spearo →',
+    },
+    tr: {
+        title: 'spearo uygulaması',
+        line: 'Kendi noktaların için tam tahmin, dalış günlüğü ve çevrimdışı bölgeler',
+        appStore: 'App Store',
+        googlePlay: 'Google Play',
+        moreDays: "spearo'da +{n} gün →",
+    },
+    hr: {
+        title: 'spearo aplikacija',
+        line: 'Potpuna prognoza za tvoje točke, dnevnik zarona i zone offline',
+        appStore: 'App Store',
+        googlePlay: 'Google Play',
+        moreDays: '+{n} dana na spearo →',
+    },
+};
+
+export function appCardStrings(locale: Locale): AppCardStrings {
+    return APP_CARD[locale] ?? APP_CARD.en;
+}
+
 export interface Strings {
     today: string;
     tomorrow: string;

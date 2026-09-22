@@ -38,8 +38,14 @@ import { SPEARO_HOSTS, sanitizeUrl } from './links.ts';
  */
 export type DayOffset = number;
 
-/** Сколько дней просим у сервера (контракт: days ≤ 7). */
-export const DAYS_REQUESTED = 7;
+/**
+ * Сколько дней показываем в плагине. Решение владельца: панель — это три дня и
+ * повод открыть spearo, где лежит полная неделя (контракт допускает days ≤ 7).
+ */
+export const DAYS_REQUESTED = 3;
+
+/** Полный горизонт сайта — столько дней ждёт пользователя на spearo.app. */
+export const FULL_HORIZON_DAYS = 7;
 
 /** Потолок горизонта по контракту. */
 export const MAX_DAYS = 7;

@@ -39,14 +39,21 @@
                 class="spearo__day"
                 class:spearo__day--active={ day === chip.offset }
                 class:spearo__day--today={ chip.offset === 0 }
-                disabled={ !chip.available }
                 title={ chip.dateISO ?? '' }
-                on:click={ () => chip.available && (day = chip.offset) }
+                on:click={ () => (day = chip.offset) }
             >
                 <span class="spearo__day-name size-xxs">{ chip.weekday }</span>
                 <span class="spearo__day-date size-xs">{ chip.dayMonth }</span>
             </button>
         {/each}
+        <a
+            class="spearo__day spearo__day--teaser size-xs"
+            target="_blank"
+            rel="noopener noreferrer"
+            href={ teaserUrl }
+        >
+            { teaserLabel }
+        </a>
     </div>
 
     {#if hasError}
@@ -106,6 +113,23 @@
         { t.openOnSpearo }
     </a>
 
+    {#if appPlayUrl || appStoreLink}
+        <div class="spearo__app">
+            <div class="spearo__app-title size-s">{ app.title }</div>
+            <div class="spearo__app-line size-xs">{ app.line }</div>
+            <div class="spearo__app-links">
+                {#if appStoreLink}
+                    <a class="spearo__app-badge size-xs" target="_blank" rel="noopener noreferrer"
+                        href={ appStoreLink }>{ app.appStore }</a>
+                {/if}
+                {#if appPlayUrl}
+                    <a class="spearo__app-badge size-xs" target="_blank" rel="noopener noreferrer"
+                        href={ appPlayUrl }>{ app.googlePlay }</a>
+                {/if}
+            </div>
+        </div>
+    {/if}
+
     <label class="spearo__toggle size-s">
         <input type="checkbox" checked={ showZones } on:change={ onZonesToggle } />
         <span>{ t.showZones }</span>
@@ -162,12 +186,21 @@
         isTimeoutError,
         onConditionsInvalidated,
         DAYS_REQUESTED,
+        FULL_HORIZON_DAYS,
         addDaysISO,
         type Conditions,
         type DayOffset,
     } from './api';
-    import { detectLocale, spearoForecastUrl, withUtm } from './links';
-    import { strings } from './i18n';
+    import {
+        DAYS_TEASER_CAMPAIGN,
+        appStoreUrl,
+        detectLocale,
+        playStoreUrl,
+        spearoForecastUrl,
+        withCampaign,
+        withUtm,
+    } from './links';
+    import { appCardStrings, strings } from './i18n';
     import { createZonesController, type ZonesSnapshot } from './zonesController';
     import { parseLatLon } from './coords';
     import type { ZoneLabels } from './zonesLayer';
@@ -187,6 +220,11 @@
     const mock = isMockMode();
 
     const zoneLabels: ZoneLabels = t.zone;
+    // Карточка приложения: тексты на языке пользователя, ссылки — только https,
+    // с той же атрибуцией магазинов, что и бейджи сайта (utm-windy).
+    const app = appCardStrings(locale);
+    const appPlayUrl = playStoreUrl();
+    const appStoreLink = appStoreUrl();
 
     let lat = 38.44;
     let lon = -9.1;
@@ -235,25 +273,43 @@
         return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     }
 
+    /**
+     * Чипы строятся ТОЛЬКО из дат, которые сервер реально прислал (до трёх).
+     * Пустых/отключённых чипов нет: день без данных просто не показывается.
+     */
     function buildChips(current: Conditions | null): DayChip[] {
         const base = current?.locationToday ?? deviceTodayISO();
         const available = new Set(current?.availableDates ?? []);
         const known = available.size > 0;
-        return Array.from({ length: DAYS_REQUESTED }, (_, offset) => {
+        const chips: DayChip[] = [];
+        for (let offset = 0; offset < DAYS_REQUESTED; offset++) {
             const dateISO = addDaysISO(base, offset);
+            if (!dateISO) continue;
+            if (known && !available.has(dateISO)) continue;
+            if (!known && offset > 0) continue; // данных ещё нет — показываем только «сегодня»
             // Дата в UTC-полдень: подпись не «переедет» на соседний день при форматировании.
-            const stamp = dateISO ? new Date(`${dateISO}T12:00:00Z`) : null;
-            return {
+            const stamp = new Date(`${dateISO}T12:00:00Z`);
+            chips.push({
                 offset,
                 dateISO,
-                weekday: stamp ? weekdayFmt.format(stamp) : '—',
-                dayMonth: stamp ? dayMonthFmt.format(stamp) : '—',
-                available: known ? Boolean(dateISO && available.has(dateISO)) : offset === 0,
-            };
-        });
+                weekday: weekdayFmt.format(stamp),
+                dayMonth: dayMonthFmt.format(stamp),
+                available: true,
+            });
+        }
+        return chips;
     }
 
     $: dayChips = buildChips(conditions);
+
+    // Тизер: остальные дни недели живут на spearo. Ссылка — тот же город, что и CTA,
+    // но со своей кампанией, чтобы отличать её от основной кнопки в отчётах.
+    const teaserDays = FULL_HORIZON_DAYS - DAYS_REQUESTED;
+    $: teaserLabel = app.moreDays.replace('{n}', String(teaserDays));
+    $: teaserUrl = withCampaign(
+        conditions?.ctaUrl ?? spearoForecastUrl(conditions?.city?.slug ?? null, locale),
+        DAYS_TEASER_CAMPAIGN,
+    );
 
     // Точка сменилась и нужного дня больше нет → откатываемся на «сегодня».
     $: if (conditions?.availableDates?.length && day > 0) {
@@ -456,9 +512,20 @@
                 border-color: rgba(126, 212, 255, 0.7);
             }
 
-            &[disabled] {
-                opacity: 0.35;
-                cursor: default;
+            &--teaser {
+                display: flex;
+                align-items: center;
+                min-width: auto;
+                padding: 5px 12px;
+                border-style: dashed;
+                border-color: rgba(126, 212, 255, 0.55);
+                color: #7fd4ff;
+                text-decoration: none;
+                white-space: nowrap;
+
+                &:hover {
+                    background: rgba(126, 212, 255, 0.12);
+                }
             }
         }
 
@@ -530,6 +597,45 @@
             display: block;
             margin: 14px 0 10px;
             text-align: center;
+        }
+
+        &__app {
+            margin: 4px 0 12px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.07);
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+
+        &__app-title {
+            font-weight: 600;
+        }
+
+        &__app-line {
+            margin-top: 2px;
+            opacity: 0.78;
+            line-height: 1.4;
+        }
+
+        &__app-links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        &__app-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.35);
+            color: inherit;
+            text-decoration: none;
+            font-weight: 600;
+
+            &:hover {
+                background: rgba(255, 255, 255, 0.12);
+            }
         }
 
         &__toggle {
