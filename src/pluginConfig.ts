@@ -2,7 +2,7 @@ import type { ExternalPluginConfig } from '@windy/interfaces';
 
 const config: ExternalPluginConfig = {
     name: 'windy-plugin-spearo',
-    version: '0.1.3',
+    version: '0.1.4',
     icon: '🤿',
     title: 'spearo — water visibility & no-take zones',
     description:
@@ -13,10 +13,11 @@ const config: ExternalPluginConfig = {
 
     // Правая панель на десктопе — влезают карточки на два дня.
     desktopUI: 'rhpane',
-    // Мобильный UI: 'small' — небольшая панель снизу, КАРТА ОСТАЁТСЯ ВИДНА
-    // (docs.windy-plugins.com/getting-started/plugin-layouts: 'fullscreen' занимает
-    // весь экран и прячет зоны, ради которых плагин и открывают).
-    mobileUI: 'small',
+    // Мобильный UI: 'fullscreen' — лист, который пользователь стягивает в половинное
+    // положение и видит карту под ним (docs.windy-plugins.com → plugin-layouts).
+    // 'small' — крошечная полоса снизу без гарантий прокрутки: семь дней, метрики и
+    // тумблер зон туда не помещаются.
+    mobileUI: 'fullscreen',
 
     // Пункт в контекстном меню карты (ПКМ / долгий тап) → плагин открывается с lat/lon.
     // Подпись пункта Windy берёт из `title` — отдельного лейбла API не даёт.

@@ -8,9 +8,11 @@ spearfishing and freediving — right on the Windy map.
 
 ## What it does
 
-- Panel for any point on the map (`desktopUI: rhpane`, `mobileUI: small` — the map
-  stays visible on phones): **water visibility (m)**, **wave**, **wind**,
-  **water temperature**, **tide** and a **safety verdict** for today and tomorrow.
+- Panel for any point on the map (`desktopUI: rhpane`, `mobileUI: fullscreen` — drag
+  the sheet to half position to keep the map visible): **water visibility (m)** first,
+  then **wave**, **wind**, **water temperature**, **tide** and a **safety verdict**.
+- **7-day horizon**: a compact horizontally scrollable day strip; days missing from the
+  response are disabled, never fabricated.
 - The point comes from the map context menu (right-click / long-press), from the URL
   `https://www.windy.com/plugin/spearo/:lat/:lon`, or from the map centre. While the
   panel is open, a single click on the map moves the point.

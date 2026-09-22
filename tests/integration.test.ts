@@ -162,20 +162,20 @@ function conditionsBody(extra: Record<string, unknown> = {}): Record<string, unk
 
 test('conditions: день выбирается по ДАТЕ, а не по индексу массива', async () => {
     mockFetch(httpResponse(200, conditionsBody()));
-    const tomorrow = await getConditions(38.44, -9.1, 'tomorrow', { locale: 'ru' });
+    const tomorrow = await getConditions(38.44, -9.1, 1, { locale: 'ru' });
     assert.equal(tomorrow.dateISO, '2026-09-21');
     assert.equal(tomorrow.visibilityM, 7);
     assert.equal(tomorrow.safety.level, 'fair');
     assert.equal(tomorrow.tideText, '↑ 06:10 3.1 m · Δ 1.8 m · spring');
 
-    const day3 = await getConditions(38.44, -9.1, 'day3', { locale: 'ru' });
+    const day3 = await getConditions(38.44, -9.1, 2, { locale: 'ru' });
     assert.equal(day3.dateISO, '2026-09-22');
     assert.equal(day3.safety.level, 'unsafe');
 });
 
 test('conditions: нужной даты нет → пустой день, а не чужой', async () => {
     mockFetch(httpResponse(200, { ...conditionsBody(), days: [conditionsBody().days![0]] } as never));
-    const tomorrow = await getConditions(38.44, -9.1, 'tomorrow');
+    const tomorrow = await getConditions(38.44, -9.1, 1);
     assert.equal(tomorrow.dateISO, null);
     assert.equal(tomorrow.visibilityM, null);
     assert.equal(tomorrow.ok, true);
@@ -186,42 +186,84 @@ test('conditions: кеш TTL 15 мин — один запрос на точку
     let now = 1_000_000;
     Date.now = () => now;
 
-    await getConditions(38.44, -9.1, 'today', { locale: 'ru' });
-    await getConditions(38.44, -9.1, 'tomorrow', { locale: 'ru' });
+    await getConditions(38.44, -9.1, 0, { locale: 'ru' });
+    await getConditions(38.44, -9.1, 1, { locale: 'ru' });
     assert.equal(calls.length, 1, 'переключение дня не должно ходить в сеть');
 
     now += CONDITIONS_TTL_MS - 1000;
-    await getConditions(38.44, -9.1, 'today', { locale: 'ru' });
+    await getConditions(38.44, -9.1, 0, { locale: 'ru' });
     assert.equal(calls.length, 1, 'внутри TTL берём из кеша');
 
     now += 2000;
-    await getConditions(38.44, -9.1, 'today', { locale: 'ru' });
+    await getConditions(38.44, -9.1, 0, { locale: 'ru' });
     assert.equal(calls.length, 2, 'после TTL — новый запрос');
 
-    await getConditions(38.44, -9.1, 'today', { locale: 'ru', force: true });
+    await getConditions(38.44, -9.1, 0, { locale: 'ru', force: true });
     assert.equal(calls.length, 3, 'force обходит кеш');
 });
 
 test('conditions: stale/staleReason доходят до UI', async () => {
     mockFetch(httpResponse(200, conditionsBody({ stale: true, staleReason: 'кеш 6 ч' })));
-    const c = await getConditions(38.44, -9.1, 'today');
+    const c = await getConditions(38.44, -9.1, 0);
     assert.equal(c.stale, true);
     assert.equal(c.staleReason, 'кеш 6 ч');
 });
 
 test('conditions: 429/503 → ok:false с кодом, сеть падает → исключение', async () => {
     mockFetch(httpResponse(429, { ok: false, error: 'rate_limited' }, { 'Retry-After': '10' }));
-    const limited = await getConditions(38.44, -9.1, 'today');
+    const limited = await getConditions(38.44, -9.1, 0);
     assert.equal(limited.ok, false);
     assert.equal(limited.error, 'rate_limited');
 
     clearConditionsCache();
     mockFetch(httpResponse(503, null));
-    const down = await getConditions(38.44, -9.1, 'today');
+    const down = await getConditions(38.44, -9.1, 0);
     assert.equal(down.ok, false);
     assert.equal(down.error, 'http_503');
 
     clearConditionsCache();
     mockFetch(new TypeError('Failed to fetch'));
-    await assert.rejects(() => getConditions(38.44, -9.1, 'today'));
+    await assert.rejects(() => getConditions(38.44, -9.1, 0));
+});
+
+// ── Горизонт 7 дней ───────────────────────────────────────────────────────────
+
+test('горизонт: запрашиваем days=7 и отдаём список доступных дат', async () => {
+    const days = Array.from({ length: 7 }, (_, i) => ({
+        date: `2026-09-${String(20 + i).padStart(2, '0')}`,
+        vizM: 3 + i,
+        waveM: 0.5,
+        windMs: 4,
+        safety: { verdict: 'green', label: 'ok' },
+    }));
+    mockFetch(httpResponse(200, { ok: true, today: '2026-09-20', days, stale: false }));
+
+    const first = await getConditions(38.44, -9.1, 0, { locale: 'en' });
+    assert.match(calls[0].url, /days=7/);
+    assert.equal(first.locationToday, '2026-09-20');
+    assert.equal(first.availableDates.length, 7);
+    assert.equal(first.dateISO, '2026-09-20');
+
+    const last = await getConditions(38.44, -9.1, 6, { locale: 'en' });
+    assert.equal(calls.length, 1, 'седьмой день берётся из того же бандла');
+    assert.equal(last.dateISO, '2026-09-26');
+    assert.equal(last.visibilityM, 9);
+});
+
+test('горизонт: короткий ответ — недостающие дни пустые, даты не выдумываются', async () => {
+    mockFetch(
+        httpResponse(200, {
+            ok: true,
+            today: '2026-09-20',
+            days: [
+                { date: '2026-09-20', vizM: 8, safety: { verdict: 'green', label: 'ok' } },
+                { date: '2026-09-21', vizM: 6, safety: { verdict: 'green', label: 'ok' } },
+            ],
+            stale: false,
+        }),
+    );
+    const fifth = await getConditions(38.44, -9.1, 4, { locale: 'en' });
+    assert.equal(fifth.dateISO, null);
+    assert.equal(fifth.visibilityM, null);
+    assert.deepEqual(fifth.availableDates, ['2026-09-20', '2026-09-21']);
 });

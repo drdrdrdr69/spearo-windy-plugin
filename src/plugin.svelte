@@ -9,48 +9,52 @@
         { title }
     </div>
 
-    <div class="spearo__coords size-xs">
-        {#if conditions?.city}
-            <b>{ conditions.city.name }</b> ·
+    <!-- Видимость — первое, что видно на телефоне: ради неё плагин и открывают. -->
+    <div class="spearo__lead" class:spearo__lead--muted={ loading || hasError }>
+        <div class="spearo__lead-label size-xs">{ t.visibility }</div>
+        <div class="spearo__lead-value">
+            {#if loading}
+                { t.loading }
+            {:else if hasError}
+                { t.noData }
+            {:else}
+                { fmt(conditions?.visibilityM ?? null, t.unitM) }
+            {/if}
+        </div>
+        {#if !loading && !hasError && conditions?.visibilityLabel}
+            <div class="spearo__lead-band size-s">{ conditions.visibilityLabel }</div>
         {/if}
-        { lat.toFixed(3) }, { lon.toFixed(3) }
-        {#if mock}<span class="badge bg-red fg-white size-xs">{ t.mockBadge }</span>{/if}
+        {#if !loading && !hasError && conditions?.stale}
+            <div class="spearo__stale size-xxs">
+                { t.stale }{ conditions.staleReason ? `: ${conditions.staleReason}` : '' }
+            </div>
+        {/if}
     </div>
-    <div class="spearo__hint size-xs">{ t.clickHint }</div>
 
+    <!-- Полоска дней: 7 чипов, горизонтальный скролл; день без данных отключён. -->
     <div class="spearo__days">
-        {#each dayKeys as key}
+        {#each dayChips as chip}
             <button
                 type="button"
                 class="spearo__day"
-                class:spearo__day--active={ day === key }
-                on:click={ () => (day = key) }
+                class:spearo__day--active={ day === chip.offset }
+                class:spearo__day--today={ chip.offset === 0 }
+                disabled={ !chip.available }
+                title={ chip.dateISO ?? '' }
+                on:click={ () => chip.available && (day = chip.offset) }
             >
-                { key === 'today' ? t.today : t.tomorrow }
+                <span class="spearo__day-name size-xxs">{ chip.weekday }</span>
+                <span class="spearo__day-date size-xs">{ chip.dayMonth }</span>
             </button>
         {/each}
     </div>
 
-    {#if loading}
-        <div class="spearo__row size-s">{ t.loading }</div>
-    {:else if error || conditions?.ok === false}
+    {#if hasError}
         <div class="rounded-box bg-red fg-white size-s">
             { t.error }{ conditions?.retryAfterS ? ` (${t.zonesRetryIn} ${conditions.retryAfterS} s)` : '' }
         </div>
-    {:else if conditions}
-        {#if conditions.stale}
-            <div class="rounded-box spearo__stale size-xs">
-                { t.stale }{ conditions.staleReason ? `: ${conditions.staleReason}` : '' }
-            </div>
-        {/if}
+    {:else if conditions && !loading}
         <div class="spearo__grid">
-            <div class="spearo__metric">
-                <div class="spearo__metric-label size-xs">{ t.visibility }</div>
-                <div class="spearo__metric-value">{ fmt(conditions.visibilityM, t.unitM) }</div>
-                {#if conditions.visibilityLabel}
-                    <div class="size-xs">{ conditions.visibilityLabel }</div>
-                {/if}
-            </div>
             <div class="spearo__metric">
                 <div class="spearo__metric-label size-xs">{ t.wave }</div>
                 <div class="spearo__metric-value">{ fmt(conditions.waveM, t.unitM) }</div>
@@ -69,11 +73,13 @@
                 <div class="spearo__metric-label size-xs">{ t.waterTemp }</div>
                 <div class="spearo__metric-value">{ fmt(conditions.waterTempC, '°C') }</div>
             </div>
+            {#if conditions.tideText}
+                <div class="spearo__metric">
+                    <div class="spearo__metric-label size-xs">{ t.tide }</div>
+                    <div class="spearo__metric-tide size-s">{ conditions.tideText }</div>
+                </div>
+            {/if}
         </div>
-
-        {#if conditions.tideText}
-            <div class="spearo__tide size-xs">{ t.tide }: { conditions.tideText }</div>
-        {/if}
 
         <div
             class="rounded-box spearo__safety size-s"
@@ -122,6 +128,14 @@
         {/if}
     {/if}
 
+    <div class="spearo__coords size-xxs">
+        {#if conditions?.city}
+            <b>{ conditions.city.name }</b> ·
+        {/if}
+        { lat.toFixed(3) }, { lon.toFixed(3) } · { t.clickHint }
+        {#if mock}<span class="badge bg-red fg-white size-xxs">{ t.mockBadge }</span>{/if}
+    </div>
+
     <div class="spearo__credit size-xxs">
         Data by <a class="clickable dotted" target="_blank" rel="noopener noreferrer"
             href={ attributionUrl }>{ conditions?.attribution?.provider ?? 'spearo.app' }</a>
@@ -147,8 +161,10 @@
         isMockMode,
         isTimeoutError,
         onConditionsInvalidated,
+        DAYS_REQUESTED,
+        addDaysISO,
         type Conditions,
-        type DayKey,
+        type DayOffset,
     } from './api';
     import { detectLocale, spearoForecastUrl, withUtm } from './links';
     import { strings } from './i18n';
@@ -169,12 +185,12 @@
     const locale = detectLocale(windyLang);
     const t = strings(locale);
     const mock = isMockMode();
-    const dayKeys: DayKey[] = ['today', 'tomorrow'];
+
     const zoneLabels: ZoneLabels = t.zone;
 
     let lat = 38.44;
     let lon = -9.1;
-    let day: DayKey = 'today';
+    let day: DayOffset = 0;
 
     let conditions: Conditions | null = null;
     let loading = false;
@@ -199,6 +215,54 @@
     const fmt = (value: number | null, unit: string): string =>
         value === null ? t.noData : `${value} ${unit}`;
 
+    $: hasError = error || conditions?.ok === false;
+
+    /** Даты из последнего ответа — чип без даты в ответе отключается, а не выдумывается. */
+    interface DayChip {
+        offset: DayOffset;
+        dateISO: string | null;
+        weekday: string;
+        dayMonth: string;
+        available: boolean;
+    }
+
+    const weekdayFmt = new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' });
+    const dayMonthFmt = new Intl.DateTimeFormat(locale, { day: '2-digit', month: '2-digit', timeZone: 'UTC' });
+
+    function deviceTodayISO(): string {
+        const d = new Date();
+        const pad = (n: number) => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    }
+
+    function buildChips(current: Conditions | null): DayChip[] {
+        const base = current?.locationToday ?? deviceTodayISO();
+        const available = new Set(current?.availableDates ?? []);
+        const known = available.size > 0;
+        return Array.from({ length: DAYS_REQUESTED }, (_, offset) => {
+            const dateISO = addDaysISO(base, offset);
+            // Дата в UTC-полдень: подпись не «переедет» на соседний день при форматировании.
+            const stamp = dateISO ? new Date(`${dateISO}T12:00:00Z`) : null;
+            return {
+                offset,
+                dateISO,
+                weekday: stamp ? weekdayFmt.format(stamp) : '—',
+                dayMonth: stamp ? dayMonthFmt.format(stamp) : '—',
+                available: known ? Boolean(dateISO && available.has(dateISO)) : offset === 0,
+            };
+        });
+    }
+
+    $: dayChips = buildChips(conditions);
+
+    // Точка сменилась и нужного дня больше нет → откатываемся на «сегодня».
+    $: if (conditions?.availableDates?.length && day > 0) {
+        const selected = addDaysISO(conditions.locationToday ?? deviceTodayISO(), day);
+        if (!selected || !conditions.availableDates.includes(selected)) {
+            day = 0;
+        }
+    }
+
     // CTA: сервер отдаёт готовый nearest.url (там уже локаль + utm). Нет его — строим сами.
     $: forecastUrl = conditions?.ctaUrl
         ? withUtm(conditions.ctaUrl)
@@ -219,7 +283,7 @@
      * (docs/INVARIANTS.md). Прерываем запрос только при смене точки и при закрытии
      * панели, иначе переключение вкладки убивало бы собственные же данные.
      */
-    async function loadConditions(nextLat: number, nextLon: number, nextDay: DayKey): Promise<void> {
+    async function loadConditions(nextLat: number, nextLon: number, nextDay: DayOffset): Promise<void> {
         if (destroyed) return;
         const key = `${nextLat.toFixed(4)}|${nextLon.toFixed(4)}`;
         if (key !== conditionsKey) {
@@ -325,40 +389,87 @@
 
 <style lang="less">
     .spearo {
-        // Мобильный режим — маленькая панель снизу: карта должна оставаться видимой,
-        // поэтому содержимое скроллится внутри панели, а не растягивает её.
+        // Панель скроллится внутри своей области: на мобильном пользователь
+        // подтягивает лист до половины и видит карту под ним.
         max-height: 100%;
         overflow-y: auto;
+        -webkit-overflow-scrolling: touch;
 
-        &__coords {
-            margin-top: 6px;
-            opacity: 0.9;
+        &__lead {
+            margin-top: 8px;
+            padding: 10px 12px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.1);
+
+            &--muted {
+                opacity: 0.75;
+            }
         }
 
-        &__hint {
-            margin-top: 2px;
-            opacity: 0.6;
+        &__lead-label {
+            opacity: 0.7;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        &__lead-value {
+            font-size: 30px;
+            line-height: 1.2;
+            font-weight: 600;
+        }
+
+        &__lead-band {
+            opacity: 0.85;
         }
 
         &__days {
             display: flex;
             gap: 6px;
-            margin: 12px 0 10px;
+            margin: 10px 0;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: none;
+
+            &::-webkit-scrollbar {
+                display: none;
+            }
         }
 
         &__day {
-            flex: 1;
-            padding: 6px 4px;
+            flex: 0 0 auto;
+            min-width: 52px;
+            padding: 5px 8px;
             border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 6px;
+            border-radius: 8px;
             background: transparent;
             color: inherit;
             cursor: pointer;
+            text-align: center;
+            line-height: 1.25;
 
             &--active {
                 background: rgba(255, 255, 255, 0.18);
                 border-color: rgba(255, 255, 255, 0.55);
             }
+
+            &--today {
+                border-color: rgba(126, 212, 255, 0.7);
+            }
+
+            &[disabled] {
+                opacity: 0.35;
+                cursor: default;
+            }
+        }
+
+        &__day-name {
+            display: block;
+            opacity: 0.75;
+            text-transform: capitalize;
+        }
+
+        &__day-date {
+            display: block;
         }
 
         &__grid {
@@ -382,14 +493,14 @@
             line-height: 1.3;
         }
 
-        &__tide {
-            margin-top: 8px;
-            opacity: 0.85;
+        &__metric-tide {
+            line-height: 1.35;
         }
 
         &__stale {
-            margin-bottom: 8px;
-            padding: 6px 10px;
+            margin-top: 6px;
+            padding: 4px 8px;
+            border-radius: 6px;
             background: rgba(255, 214, 10, 0.2);
         }
 
@@ -429,8 +540,13 @@
             cursor: pointer;
         }
 
+        &__coords {
+            margin-top: 12px;
+            opacity: 0.65;
+        }
+
         &__credit {
-            margin-top: 14px;
+            margin-top: 8px;
             opacity: 0.6;
         }
     }

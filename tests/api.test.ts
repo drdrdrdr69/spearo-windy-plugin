@@ -41,7 +41,7 @@ test('пути эндпоинтов соответствуют контракт�
 });
 
 test('normalizeConditions: day0 — узлы пересчитаны в м/с, nearest → city + ctaUrl', () => {
-    const c = normalizeConditions(CONTRACT_RESPONSE, 38.44, -9.1, 'today');
+    const c = normalizeConditions(CONTRACT_RESPONSE, 38.44, -9.1, 0);
     assert.equal(c.ok, true);
     assert.equal(c.dateISO, '2026-09-20');
     assert.equal(c.visibilityM, 11);
@@ -62,7 +62,7 @@ test('normalizeConditions: day0 — узлы пересчитаны в м/с, ne
 });
 
 test('normalizeConditions: day1/day2 — м/с → узлы, tide, неизвестный verdict → unknown, null → null', () => {
-    const d1 = normalizeConditions(CONTRACT_RESPONSE, 38.44, -9.1, 'tomorrow');
+    const d1 = normalizeConditions(CONTRACT_RESPONSE, 38.44, -9.1, 1);
     assert.equal(d1.dateISO, '2026-09-21');
     assert.equal(d1.windMs, 8);
     assert.equal(d1.windKts, 15.6);
@@ -70,7 +70,7 @@ test('normalizeConditions: day1/day2 — м/с → узлы, tide, неизве�
     assert.equal(d1.tide?.events[0]?.time, '14:20');
     assert.equal(d1.tideText, '↓ 14:20 0.8 m · Δ 1.2 m · neap');
 
-    const d2 = normalizeConditions(CONTRACT_RESPONSE, 38.44, -9.1, 'day3');
+    const d2 = normalizeConditions(CONTRACT_RESPONSE, 38.44, -9.1, 2);
     assert.equal(d2.safety.level, 'unknown');
     assert.equal(d2.visibilityM, null);
     assert.equal(d2.waveM, null);
@@ -78,14 +78,14 @@ test('normalizeConditions: day1/day2 — м/с → узлы, tide, неизве�
 });
 
 test('normalizeConditions: ok:false → ok:false без падения', () => {
-    const c = normalizeConditions({ ok: false, error: 'upstream_down' }, 1, 2, 'today');
+    const c = normalizeConditions({ ok: false, error: 'upstream_down' }, 1, 2, 0);
     assert.equal(c.ok, false);
     assert.equal(c.visibilityM, null);
     assert.equal(c.safety.level, 'unknown');
 });
 
 test('normalizeConditions: терпит альтернативные имена полей', () => {
-    const c = normalizeConditions({ data: { days: [{ visibility_m: '7', wind_ms: 3 }] } }, 0, 0, 'today');
+    const c = normalizeConditions({ data: { days: [{ visibility_m: '7', wind_ms: 3 }] } }, 0, 0, 0);
     assert.equal(c.visibilityM, 7);
     assert.equal(c.windMs, 3);
     assert.equal(c.city, null);
@@ -139,12 +139,12 @@ test('normalizeZones: кап 400 features → truncated', () => {
 
 test('мок-режим отдаёт правдоподобные данные без сети', async () => {
     setMockMode(true);
-    const c = await getConditions(38.44, -9.1, 'today', { locale: 'ru' });
+    const c = await getConditions(38.44, -9.1, 0, { locale: 'ru' });
     assert.equal(c.source, 'mock');
     assert.ok(c.visibilityM !== null && c.visibilityM > 0);
     assert.ok(c.windKts !== null && c.windMs !== null);
     assert.match(c.ctaUrl ?? '', /^https:\/\/spearo\.app\/ru\/sesimbra\?utm_source=windy/);
-    const again = await getConditions(38.44, -9.1, 'today', { locale: 'ru' });
+    const again = await getConditions(38.44, -9.1, 0, { locale: 'ru' });
     assert.equal(again.visibilityM, c.visibilityM); // детерминированность
 
     const zones = await getZones({ south: 38.3, west: -9.3, north: 38.6, east: -8.9 });

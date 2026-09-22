@@ -32,13 +32,22 @@
 
 import { SPEARO_HOSTS, sanitizeUrl } from './links.ts';
 
-/** Ключ дня панели. Сервер отдаёт days[] — day0/day1/day2. */
-export type DayKey = 'today' | 'tomorrow' | 'day3';
+/**
+ * Смещение дня от «сегодня» в МЕСТЕ: 0 — сегодня, 1 — завтра, … 6 — седьмой день.
+ * Сервер отдаёт days[] с датами; выбор идёт по ДАТЕ, а не по индексу массива.
+ */
+export type DayOffset = number;
 
-export const DAY_INDEX: Record<DayKey, number> = { today: 0, tomorrow: 1, day3: 2 };
+/** Сколько дней просим у сервера (контракт: days ≤ 7). */
+export const DAYS_REQUESTED = 7;
 
-/** Сколько дней просим у сервера (контракт: days=3). */
-export const DAYS_REQUESTED = 3;
+/** Потолок горизонта по контракту. */
+export const MAX_DAYS = 7;
+
+export function clampDayOffset(offset: number): DayOffset {
+    if (!Number.isFinite(offset)) return 0;
+    return Math.min(Math.max(Math.trunc(offset), 0), MAX_DAYS - 1);
+}
 
 /** Время жизни кеша ответов conditions. */
 export const CONDITIONS_TTL_MS = 15 * 60 * 1000;
@@ -92,9 +101,14 @@ export interface TideInfo {
 export interface Conditions {
     lat: number;
     lon: number;
-    day: DayKey;
+    /** Смещение дня от «сегодня» места. */
+    day: DayOffset;
     /** days[i].date, YYYY-MM-DD (выбран по ДАТЕ, а не по индексу). */
     dateISO: string | null;
+    /** «Сегодня» места из ответа — база для полоски дней. */
+    locationToday: string | null;
+    /** Даты, которые сервер реально прислал (чипы без даты отключаются, а не выдумываются). */
+    availableDates: string[];
     /** days[i].vizM — видимость воды, м. */
     visibilityM: number | null;
     /** days[i].vizBand */
@@ -555,12 +569,14 @@ export function addDaysISO(iso: string, days: number): string | null {
     return new Date(base + days * 86400000).toISOString().slice(0, 10);
 }
 
-function emptyConditions(lat: number, lon: number, day: DayKey, ok: boolean, error: string | null): Conditions {
+function emptyConditions(lat: number, lon: number, day: DayOffset, ok: boolean, error: string | null): Conditions {
     return {
         lat,
         lon,
         day,
         dateISO: null,
+        locationToday: null,
+        availableDates: [],
         visibilityM: null,
         visibilityLabel: null,
         waveM: null,
@@ -627,9 +643,9 @@ export function normalizeTide(raw: unknown): { tide: TideInfo | null; text: stri
  * date, иначе дата первого дня) и ищем день с датой «сегодня + N». Индекс —
  * только аварийный фолбэк, если дат нет.
  */
-export function pickDayNode(body: Record<string, unknown>, day: DayKey): Record<string, unknown> {
+export function pickDayNode(body: Record<string, unknown>, day: DayOffset): Record<string, unknown> {
     const days = Array.isArray(body.days) ? (body.days as unknown[]) : [];
-    const index = DAY_INDEX[day];
+    const index = clampDayOffset(day);
     const baseISO = str(body.today, body.localDate, body.localToday, body.date, obj(days[0]).date as string);
     if (baseISO) {
         const target = addDaysISO(baseISO, index);
@@ -645,7 +661,7 @@ export function pickDayNode(body: Record<string, unknown>, day: DayKey): Record<
 }
 
 /** Нормализатор ответа /api/plugin/windy/conditions. */
-export function normalizeConditions(raw: unknown, lat: number, lon: number, day: DayKey): Conditions {
+export function normalizeConditions(raw: unknown, lat: number, lon: number, day: DayOffset): Conditions {
     const root = obj(raw);
     const body = obj(root.data ?? root.result ?? root);
     if (root.ok === false || body.ok === false) {
@@ -653,6 +669,11 @@ export function normalizeConditions(raw: unknown, lat: number, lon: number, day:
     }
 
     const dayNode = pickDayNode(body, day);
+    const daysList = Array.isArray(body.days) ? (body.days as unknown[]) : [];
+    const availableDates = daysList
+        .map(item => str(obj(item).date)?.slice(0, 10) ?? null)
+        .filter((d): d is string => Boolean(d));
+    const locationToday = str(body.today, body.localDate, body.localToday, availableDates[0]);
     const safetyNode = obj(dayNode.safety ?? body.safety);
     const nearestNode = obj(body.nearest ?? body.city ?? body.nearestCity);
     const zonesNode = obj(body.zones ?? body.noTake ?? body.noTakeZone);
@@ -670,6 +691,8 @@ export function normalizeConditions(raw: unknown, lat: number, lon: number, day:
         lon: num(obj(body.point).lon, body.lon) ?? lon,
         day,
         dateISO: str(dayNode.date, dayNode.dateISO),
+        locationToday,
+        availableDates,
         visibilityM: num(dayNode.vizM, dayNode.visibilityM, dayNode.visibility_m, dayNode.visibility),
         visibilityLabel: str(dayNode.vizBand, dayNode.visibilityLabel, dayNode.visibility_label),
         waveM: num(dayNode.waveM, dayNode.wave_m, dayNode.waveHeightM, dayNode.wave),
@@ -1020,7 +1043,7 @@ function rememberBackoff(path: string, retryAfterS: number | null, now: number):
 export async function getConditions(
     lat: number,
     lon: number,
-    day: DayKey = 'today',
+    day: DayOffset = 0,
     options: RequestOptions = {},
 ): Promise<Conditions> {
     if (isMockMode()) {
@@ -1187,14 +1210,22 @@ export async function getZones(bbox: BBox, options: RequestOptions = {}): Promis
 
 // ── Мок-данные (?mock=1) ──────────────────────────────────────────────────────
 
+/** «Сегодня» мока (локальная дата устройства). */
+function mockTodayISO(): string {
+    const d = new Date(Date.now());
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
 /** Детерминированный псевдослучайный [0,1) по координате — мок не «мигает». */
 function seeded(lat: number, lon: number, salt: number): number {
     const x = Math.sin(lat * 12.9898 + lon * 78.233 + salt * 37.719) * 43758.5453;
     return x - Math.floor(x);
 }
 
-function mockConditions(lat: number, lon: number, day: DayKey, locale?: string): Conditions {
-    const salt = DAY_INDEX[day] + 1;
+function mockConditions(lat: number, lon: number, day: DayOffset, locale?: string): Conditions {
+    const offset = clampDayOffset(day);
+    const salt = offset + 1;
     const visibilityM = round(2 + seeded(lat, lon, salt) * 16, 1);
     const waveM = round(0.1 + seeded(lat, lon, salt + 10) * 2.2, 1);
     const windMs = round(1 + seeded(lat, lon, salt + 20) * 11, 1);
@@ -1217,7 +1248,7 @@ function mockConditions(lat: number, lon: number, day: DayKey, locale?: string):
     const isRu = (locale ?? '').toLowerCase().startsWith('ru');
     const texts = isRu ? ru : en;
     const date = new Date();
-    date.setDate(date.getDate() + DAY_INDEX[day]);
+    date.setDate(date.getDate() + offset);
     const lang = isRu ? 'ru' : 'en';
     const { tide, text: tideText } = normalizeTide({
         rangeM: 1.8,
@@ -1231,8 +1262,10 @@ function mockConditions(lat: number, lon: number, day: DayKey, locale?: string):
     return {
         lat,
         lon,
-        day,
+        day: offset,
         dateISO: date.toISOString().slice(0, 10),
+        locationToday: mockTodayISO(),
+        availableDates: Array.from({ length: DAYS_REQUESTED }, (_, i) => addDaysISO(mockTodayISO(), i) ?? ''),
         visibilityM,
         visibilityLabel: isRu
             ? visibilityM > 12

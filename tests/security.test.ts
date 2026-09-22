@@ -66,7 +66,7 @@ test('nearest.url: только https на spearo.app, иначе null', () => {
         { days: [{}], nearest: { slug: 'x', name: 'X', url: 'javascript:alert(1)' } },
         0,
         0,
-        'today',
+        0,
     );
     assert.equal(evil.ctaUrl, null);
 
@@ -74,7 +74,7 @@ test('nearest.url: только https на spearo.app, иначе null', () => {
         { days: [{}], nearest: { slug: 'x', name: 'X', url: 'https://evil.example/x' } },
         0,
         0,
-        'today',
+        0,
     );
     assert.equal(foreign.ctaUrl, null);
 
@@ -82,7 +82,7 @@ test('nearest.url: только https на spearo.app, иначе null', () => {
         { days: [{}], nearest: { slug: 'x', name: 'X', url: 'https://spearo.app/en/x?utm_source=windy' } },
         0,
         0,
-        'today',
+        0,
     );
     assert.equal(good.ctaUrl, 'https://spearo.app/en/x?utm_source=windy');
 });
@@ -96,7 +96,7 @@ test('attribution.url и zones.actUrl чистятся по схеме', () => {
         },
         0,
         0,
-        'today',
+        0,
     );
     assert.equal(c.attribution?.url, null);
     assert.equal(c.noTake?.actUrl, 'http://gov.example/act'); // http для госсайтов допустим

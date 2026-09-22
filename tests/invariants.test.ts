@@ -196,8 +196,8 @@ test('[2] смена дня ждёт ТОТ ЖЕ промис и не отмен
 
     // Панель держит ОДИН AbortController на точку: смена дня его не трогает.
     const abort = new AbortController();
-    const today = getConditions(24.5, -81.8, 'today', { locale: 'ru', signal: abort.signal });
-    const tomorrow = getConditions(24.5, -81.8, 'tomorrow', { locale: 'ru', signal: abort.signal });
+    const today = getConditions(24.5, -81.8, 0, { locale: 'ru', signal: abort.signal });
+    const tomorrow = getConditions(24.5, -81.8, 1, { locale: 'ru', signal: abort.signal });
     resolveFetch!(httpResponse(200, BUNDLE));
 
     const [a, b] = await Promise.all([today, tomorrow]);
@@ -218,12 +218,12 @@ test('[2] отменённый бандл не переиспользуется'
         });
     };
     const abort = new AbortController();
-    const pending = getConditions(24.5, -81.8, 'today', { signal: abort.signal });
+    const pending = getConditions(24.5, -81.8, 0, { signal: abort.signal });
     abort.abort();
     await assert.rejects(() => pending);
 
     mockFetch(httpResponse(200, BUNDLE));
-    const fresh = await getConditions(24.5, -81.8, 'today');
+    const fresh = await getConditions(24.5, -81.8, 0);
     assert.equal(fresh.ok, true);
     assert.equal(calls.length, 2, 'после отмены делается НОВЫЙ запрос');
 });
@@ -236,13 +236,13 @@ test('[3] 23:59 → 00:01: бандл считается устаревшим и
     let now = beforeMidnight;
     Date.now = () => now;
 
-    await getConditions(24.5, -81.8, 'today');
-    await getConditions(24.5, -81.8, 'tomorrow');
+    await getConditions(24.5, -81.8, 0);
+    await getConditions(24.5, -81.8, 1);
     assert.equal(calls.length, 1);
 
     now = new Date(2026, 8, 21, 0, 1, 0).getTime(); // TTL ещё не вышел, но день уже другой
     assert.ok(now - beforeMidnight < CONDITIONS_TTL_MS);
-    await getConditions(24.5, -81.8, 'today');
+    await getConditions(24.5, -81.8, 0);
     assert.equal(calls.length, 2, 'после полуночи бандл перезапрашивается');
 });
 
@@ -250,9 +250,9 @@ test('[3] 23:59 → 00:01: бандл считается устаревшим и
 
 test('[4] stale-ответ не кэшируется', async () => {
     mockFetch(httpResponse(200, { ...BUNDLE, stale: true, staleReason: 'no-data' }));
-    const first = await getConditions(24.5, -81.8, 'today');
+    const first = await getConditions(24.5, -81.8, 0);
     assert.equal(first.stale, true);
-    await getConditions(24.5, -81.8, 'today');
+    await getConditions(24.5, -81.8, 0);
     assert.equal(calls.length, 2, 'stale в кэш не кладётся');
 });
 
@@ -261,20 +261,20 @@ test('[4] 429 не кэшируется и уважает Retry-After', async ()
     let now = 5_000_000;
     Date.now = () => now;
 
-    const limited = await getConditions(24.5, -81.8, 'today');
+    const limited = await getConditions(24.5, -81.8, 0);
     assert.equal(limited.ok, false);
     assert.equal(limited.error, 'rate_limited');
     assert.equal(limited.retryAfterS, 25);
 
     // Пока бэкофф жив — в сеть не ходим.
-    const again = await getConditions(24.5, -81.8, 'today');
+    const again = await getConditions(24.5, -81.8, 0);
     assert.equal(calls.length, 1, 'во время бэкоффа сетевых запросов нет');
     assert.equal(again.error, 'rate_limited');
     assert.ok((again.retryAfterS ?? 0) > 0);
 
     now += 26_000;
     mockFetch(httpResponse(200, BUNDLE));
-    const ok = await getConditions(24.5, -81.8, 'today');
+    const ok = await getConditions(24.5, -81.8, 0);
     assert.equal(ok.ok, true);
     assert.equal(calls.length, 2, 'после Retry-After запрос повторяется');
 });
@@ -360,20 +360,20 @@ test('[F1] полночь считается по таймзоне МЕСТА, �
 
     let now = before;
     Date.now = () => now;
-    await getConditions(-36.85, 174.76, 'today', { locale: 'en' });
+    await getConditions(-36.85, 174.76, 0, { locale: 'en' });
     assert.equal(calls.length, 1);
 
     now = after;
-    await getConditions(-36.85, 174.76, 'tomorrow', { locale: 'en' });
+    await getConditions(-36.85, 174.76, 1, { locale: 'en' });
     assert.equal(calls.length, 1, 'полночь устройства не роняет бандл места');
 
     // А вот полночь САМОГО Окленда роняет.
     now = before + msUntilMidnightInZone(before, 'Pacific/Auckland') + 60_000;
     clearConditionsCache();
-    await getConditions(-36.85, 174.76, 'today', { locale: 'en' });
+    await getConditions(-36.85, 174.76, 0, { locale: 'en' });
     const atNzMidnight = calls.length;
     now += 60_000;
-    await getConditions(-36.85, 174.76, 'today', { locale: 'en' });
+    await getConditions(-36.85, 174.76, 0, { locale: 'en' });
     assert.equal(calls.length, atNzMidnight, 'сразу после полуночи места бандл свежий');
     assert.ok(msUntilMidnightInZone(now, 'Pacific/Auckland') > 20 * 3600_000, 'следующая полночь — почти через сутки');
 });
@@ -385,14 +385,14 @@ test('[F1] таймер полуночи будит панель (перерис
         woken++;
     });
     try {
-        await getConditions(24.5, -81.8, 'today');
+        await getConditions(24.5, -81.8, 0);
         assert.equal(activeMidnightTimers(), 1);
         // Вместо ожидания суток дёргаем тот же путь, что и таймер.
         __fireMidnightForTests();
         assert.equal(woken, 1, 'подписчик разбужен');
         assert.equal(activeMidnightTimers(), 0, 'запись выброшена вместе с таймером');
 
-        await getConditions(24.5, -81.8, 'today');
+        await getConditions(24.5, -81.8, 0);
         assert.equal(calls.length, 2, 'после пробуждения данные перезапрашиваются');
     } finally {
         unsubscribe();
@@ -415,8 +415,8 @@ test('[F2] обрыв при чтении тела: два вызова, оди�
         });
     };
 
-    const a = getConditions(24.5, -81.8, 'today');
-    const b = getConditions(24.5, -81.8, 'tomorrow');
+    const a = getConditions(24.5, -81.8, 0);
+    const b = getConditions(24.5, -81.8, 1);
     await assert.rejects(() => a, (e: Error) => e.name === 'AbortError');
     await assert.rejects(() => b, (e: Error) => e.name === 'AbortError');
     assert.equal(calls.length, 1, 'на два дня — один fetch');
@@ -424,7 +424,7 @@ test('[F2] обрыв при чтении тела: два вызова, оди�
     assert.equal(activeMidnightTimers(), 0, 'битая запись не осталась в кэше');
 
     mockFetch(httpResponse(200, BUNDLE));
-    const fresh = await getConditions(24.5, -81.8, 'today');
+    const fresh = await getConditions(24.5, -81.8, 0);
     assert.equal(fresh.ok, true);
     assert.equal(fresh.dateISO, '2026-09-20', 'null-тело не подменило собой честный ответ');
     assert.equal(calls.length, 2);
@@ -434,43 +434,43 @@ test('[F3] бэкофф душит только сеть: валидный кэ�
     let now = 7_000_000;
     Date.now = () => now;
     mockFetch(httpResponse(200, BUNDLE));
-    const a = await getConditions(24.5, -81.8, 'today');
+    const a = await getConditions(24.5, -81.8, 0);
     assert.equal(a.ok, true);
 
     // Точка B ловит 429 и включает бэкофф пути.
     mockFetch(httpResponse(429, { ok: false, error: 'rate_limited' }, { 'Retry-After': '40' }));
-    const b = await getConditions(10, 10, 'today');
+    const b = await getConditions(10, 10, 0);
     assert.equal(b.error, 'rate_limited');
     assert.equal(b.retryAfterS, 40);
 
     // A по-прежнему отдаёт свой закэшированный бандл — в том числе «завтра».
-    const aTomorrow = await getConditions(24.5, -81.8, 'tomorrow');
+    const aTomorrow = await getConditions(24.5, -81.8, 1);
     assert.equal(aTomorrow.ok, true);
     assert.equal(aTomorrow.dateISO, '2026-09-21');
     assert.equal(calls.length, 2, 'кэш обслужен без сети');
 
     // force НЕ обходит бэкофф.
-    const forced = await getConditions(24.5, -81.8, 'today', { force: true });
+    const forced = await getConditions(24.5, -81.8, 0, { force: true });
     assert.equal(forced.ok, false);
     assert.equal(forced.error, 'rate_limited');
     assert.equal(calls.length, 2, 'force во время бэкоффа в сеть не идёт');
 
     now += 41_000;
     mockFetch(httpResponse(200, BUNDLE));
-    const after = await getConditions(24.5, -81.8, 'today', { force: true });
+    const after = await getConditions(24.5, -81.8, 0, { force: true });
     assert.equal(after.ok, true);
     assert.equal(calls.length, 3);
 });
 
 test('[F5] force заменяет запись вместе с таймером; cleanup не оставляет таймеров', async () => {
     mockFetch(httpResponse(200, BUNDLE));
-    await getConditions(24.5, -81.8, 'today');
+    await getConditions(24.5, -81.8, 0);
     assert.equal(activeMidnightTimers(), 1);
 
-    await getConditions(24.5, -81.8, 'today', { force: true });
+    await getConditions(24.5, -81.8, 0, { force: true });
     assert.equal(activeMidnightTimers(), 1, 'старый таймер снят, живёт только новый');
 
-    await getConditions(10, 20, 'today');
+    await getConditions(10, 20, 0);
     assert.equal(activeMidnightTimers(), 2);
 
     clearConditionsCache();
@@ -481,7 +481,7 @@ test('[F6] Retry-After невидим без Access-Control-Expose-Headers → �
     let now = 11_000_000;
     Date.now = () => now;
     mockFetch(httpResponseNoExpose(429, { ok: false, error: 'rate_limited' }, { 'Retry-After': '5' }));
-    const limited = await getConditions(24.5, -81.8, 'today');
+    const limited = await getConditions(24.5, -81.8, 0);
     assert.equal(limited.ok, false);
     assert.equal(limited.retryAfterS, null, 'браузер не отдал скрытый Retry-After');
     // Без заголовка держим свою паузу — сервер всё равно не долбим.
